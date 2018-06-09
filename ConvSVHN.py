@@ -80,4 +80,33 @@ lr = final_lr + tf.train.exponential_decay(init_lr, step, lr_decay, 1/math.e)
 loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = Y_fa2_logits, labels = Y_))
 optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
 
+# Checking accuracy
+correct_pred = tf.equal(tf.argmax(Y, 1), tf.argmax(Y_, 1))
+accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
+def main():
+    # Initialization
+    sess = tf.InteractiveSession()
+    sess.run(tf.global_variables_initializer())
+
+    for i in range(num_of_batches):
+        # Calculate new learning rate (if needed, may not be)
+        # ## MAYBE NOT NEEDED## lr = final_lr + tf.train.exponential_decay(init_lr, step, lr_decay, 1/math.e)
+        # print("Learning rate is: {}".format(lr))
+        # _, lr_now = sess.run([optimizer, lr], {X: batch_X, Y_: batch_Y, step: i})
+        # Run training analytics every so many batches
+        if i%25 == 0:
+            print("Training Analytics")
+            # print("LR: "+str(lr_now))
+        # Run test analytics every so many batches
+        if i%100 == 0:
+            print("Testing Analytics")
+            # acc_t, loss_t, lr_t = sess.run([accuracy, loss, lr], feed_dict:{X: TEST_DATA, Y_: TEST_LABELS})
+    # After training loops are complete, execute a final validation step
+    # All of the training we plan to do is now complete
+    print("Final NN Test")
+    # acc_t, loss_t = sess.run([accuracy, loss], feed_dict:{X: TEST_DATA, Y_: TEST_LABELS})
+
+
+if __name__ == "__main__":
+    main()
