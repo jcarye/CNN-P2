@@ -216,13 +216,15 @@ def main():
     # train_labels = train_labels[13000:]
 
     train_dataset = tf.data.Dataset.from_tensor_slices((train_inputs, train_labels))
-    train_batch = train_dataset.batch(mbatch_size)
+    train_batch = train_dataset.repeat().batch(mbatch_size)
     train_iterator = train_batch.make_one_shot_iterator()
+    next_train = train_iterator.get_next()
 
     # validation_dataset = tf.data.Dataset.from_tensor_slices((validation_inputs, validation_labels))
     test_dataset = tf.data.Dataset.from_tensor_slices((test_inputs, test_labels))
-    test_batch = test_dataset.batch(mbatch_size)
+    test_batch = test_dataset.repeat().batch(mbatch_size)
     test_iterator = test_batch.make_one_shot_iterator()
+    next_test = test_iterator.get_next()
 
     # Initialization
     # init
@@ -231,7 +233,7 @@ def main():
     sess.run(init)
 
     for i in range(num_of_batches):
-        batch_X, batch_Y = sess.run(train_iterator.get_next())
+        batch_X, batch_Y = sess.run(next_train)
 
         # Run training analytics every so many batches
         if i%25 == 0:
@@ -241,7 +243,7 @@ def main():
             print(str(i) + ": accuracy:" + str(a) + " loss: " + str(c) + " (lr:" + str(l) + ")")
         # Run test analytics every so many batches
         if i%100 == 0:
-            TEST_DATA, TEST_LABELS = sess.run(test_iterator.get_next())
+            TEST_DATA, TEST_LABELS = sess.run(next_test)
             a, c = sess.run([accuracy, cross_entropy],
                             feed_dict={X: TEST_DATA,
                                        Y_: TEST_LABELS,
