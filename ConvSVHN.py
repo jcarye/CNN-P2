@@ -2,6 +2,85 @@
 
 import tensorflow as tf
 import math
+import os
+import urllib
+import collections
+
+from scipy.io import loadmat
+# from tensorflow.python.framework import dtypes
+# import tensorflow.examples.tutorials.mnist as mnist
+# from tensorflow.python.framework import random_seed
+
+###############
+# Global Vars #
+###############
+
+# Size of inputs
+
+DIM = 32
+layers = 3
+
+############
+# Get Data #
+############
+
+# This area is a work in progress
+# TODO: get the data into one of the TF classes that let's us easily generate batches
+# Possible COAs: DataSet method defined in tensorflow.examples.tutorials.mnist or
+#       maybe tf.data.Dataset
+# Data currently auto downloads and imports if not already present
+# Labels are currently in One-Hot format but may need to be in integer format depending
+#       on how we shoehorn the dataset class
+
+# Dataset = collections.namedtuple('Dataset', ['data', 'target'])
+# Datasets = collections.namedtuple('Datasets', ['train', 'validation', 'test'])
+
+DOWNLOADS_DIR = 'data'
+
+if not os.path.exists(DOWNLOADS_DIR):
+    try:
+        print('Making Dir')
+        os.mkdir(DOWNLOADS_DIR)
+    except OSError as exc:
+        raise
+
+url="http://ufldl.stanford.edu/housenumbers/"
+
+filenames = ["train_32x32.mat", "test_32x32.mat"]
+
+for f in filenames:
+    link = url + f
+    filename = os.path.join(DOWNLOADS_DIR, f)
+    if not os.path.isfile(filename):
+        print('Downloading: ' + filename)
+        try:
+            urllib.request.urlretrieve(link, filename)
+        except Exception as inst:
+            print(inst)
+            print('   Encounterd unknown error. Continuing.')
+
+testdata = loadmat('./data/test_32x32.mat')
+traindata = loadmat('./data/train_32x32.mat')
+
+test_images = testdata['X']
+test_labels = tf.one_hot(testdata['y'], 10)
+
+train_images = traindata['X']
+train_labels = tf.one_hot(traindata['y'], 10)
+
+validation_images = train_images[:13000]
+validation_labels = train_labels[:13000]
+train_images = train_images[13000:]
+train_labels = train_labels[13000:]
+
+# options = dict(dtype=dtypes.float32, reshape=True, seed=None)
+
+
+# train = mnist.DataSet(train_images, train_labels, **options)
+# validation = DataSet(validation_images, validation_labels, **options)
+# test - DataSet(test_images, test_labels, **options)
+
+
 
 ############################
 # TRAINING HYPERPARAMETERS #
@@ -36,7 +115,7 @@ N1 = 100
 N2 = 10 # Output layer
 
 # Input images are 28x28x3 RBG images
-X = tf.placeholder(tf.float32, [None, 28, 28, 3])
+X = tf.placeholder(tf.float32, [None, DIM, DIM, layers])
 
 # Output format has yet to be determined, CIFAR-10 placeholder
 Y_ = tf.placeholder(tf.float32, [None, N2])
@@ -63,7 +142,7 @@ B_conv3 = tf.Variable(tf.zeros([C3]))
 Y_conv3 = tf.nn.relu(tf.nn.conv2d(Y_conv2, W_conv3, strides=[1, S3, S3, 1], padding='SAME') + B_conv3)
 
 # First FA layer
-reduced_size = (((28 / S1) / S2) / S3)
+reduced_size = (((DIM / S1) / S2) / S3) # I changed this from (((28 / S1) / S2) / S3) because I figured the '28' was left over from MNIST
 Y_conv2fc = tf.reshape(Y_conv3, shape=[-1,int(reduced_size)])
 W_fa1 = tf.Variable(weights_init([int(reduced_size), N1]))
 B_fa1 = tf.Variable(tf.zeros([N1]))
