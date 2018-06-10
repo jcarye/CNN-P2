@@ -4,6 +4,7 @@ import tensorflow as tf
 import math
 import os
 import urllib
+import numpy as np
 import collections
 
 from scipy.io import loadmat
@@ -21,7 +22,7 @@ DIM = 32
 layers = 3
 
 ############
-# Get Data #
+# GET DATA #
 ############
 
 # This area is a work in progress
@@ -63,23 +64,28 @@ testdata = loadmat('./data/test_32x32.mat')
 traindata = loadmat('./data/train_32x32.mat')
 
 test_images = testdata['X']
-test_labels = tf.one_hot(testdata['y'], 10)
+test_labels = tf.one_hot((testdata['y'])[:, 0], 10)
 
 train_images = traindata['X']
-train_labels = tf.one_hot(traindata['y'], 10)
+train_labels = tf.one_hot((traindata['y'])[:, 0], 10)
 
-validation_images = train_images[:13000]
-validation_labels = train_labels[:13000]
-train_images = train_images[13000:]
-train_labels = train_labels[13000:]
-
-# options = dict(dtype=dtypes.float32, reshape=True, seed=None)
+##################
+# NORMALIZE DATA #
+##################
 
 
-# train = mnist.DataSet(train_images, train_labels, **options)
-# validation = DataSet(validation_images, validation_labels, **options)
-# test - DataSet(test_images, test_labels, **options)
-
+def norm_images(images):
+    rows = images.shape[0]
+    columns = images.shape[1]
+    channels = images.shape[2]
+    num = images.shape[3]
+    norm_array = np.empty(shape=(num, rows, columns, channels), dtype=np.float32)
+    for x in range(0, num):
+        image = images[:, :, :, x]
+        norm_vec = (255-image)/255.0
+        norm_vec -= np.mean(norm_vec, axis=0)  # Are we losing skew data here?  Look into this.
+        norm_array[x] = norm_vec
+    return norm_array
 
 
 ############################
@@ -142,9 +148,9 @@ B_conv3 = tf.Variable(tf.zeros([C3]))
 Y_conv3 = tf.nn.relu(tf.nn.conv2d(Y_conv2, W_conv3, strides=[1, S3, S3, 1], padding='SAME') + B_conv3)
 
 # First FA layer
-reduced_size = (((DIM / S1) / S2) / S3) # I changed this from (((28 / S1) / S2) / S3) because I figured the '28' was left over from MNIST
-Y_conv2fc = tf.reshape(Y_conv3, shape=[-1,int(reduced_size)])
-W_fa1 = tf.Variable(weights_init([int(reduced_size), N1]))
+reduced_size = int(((DIM / S1) / S2) / S3) # I changed this from (((28 / S1) / S2) / S3) because I figured the '28' was left over from MNIST
+Y_conv2fc = tf.reshape(Y_conv3, shape=[-1, reduced_size * reduced_size * C3])
+W_fa1 = tf.Variable(weights_init([reduced_size * reduced_size * C3, N1]))
 B_fa1 = tf.Variable(tf.zeros([N1]))
 Y_fa1 = tf.nn.relu(tf.matmul(Y_conv2fc, W_fa1) + B_fa1)
 
@@ -156,7 +162,7 @@ Y = tf.nn.softmax(Y_fa2_logits)
 
 # Learning Rate and Optimizer
 lr = final_lr + tf.train.exponential_decay(init_lr, step, lr_decay, 1/math.e)
-loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = Y_fa2_logits, labels = Y_))
+loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=Y_fa2_logits, labels=Y_))
 optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
 
 # Checking accuracy
@@ -164,23 +170,46 @@ correct_pred = tf.equal(tf.argmax(Y, 1), tf.argmax(Y_, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 def main():
+    test_inputs = norm_images(test_images)
+    train_inputs = norm_images(train_images)
+
+    # validation_inputs = train_inputs[:13000]
+    # validation_labels = train_labels[:13000]
+    # train_inputs = train_inputs[13000:]
+    # train_labels = train_labels[13000:]
+
+    train_dataset = tf.data.Dataset.from_tensor_slices((train_inputs, train_labels))
+    train_batch = train_dataset.repeat().batch(mbatch_size)
+    train_iterator = train_batch.make_one_shot_iterator()
+
+    # validation_dataset = tf.data.Dataset.from_tensor_slices((validation_inputs, validation_labels))
+    test_dataset = tf.data.Dataset.from_tensor_slices((test_inputs, test_labels))
+    test_batch = test_dataset.repeat().batch(mbatch_size)
+    test_iterator = test_batch.make_one_shot_iterator()
+
     # Initialization
     sess = tf.InteractiveSession()
     sess.run(tf.global_variables_initializer())
 
     for i in range(num_of_batches):
-        # Calculate new learning rate (if needed, may not be)
-        # ## MAYBE NOT NEEDED## lr = final_lr + tf.train.exponential_decay(init_lr, step, lr_decay, 1/math.e)
-        # print("Learning rate is: {}".format(lr))
-        # _, lr_now = sess.run([optimizer, lr], {X: batch_X, Y_: batch_Y, step: i})
+        batch_X, batch_Y = sess.run(train_iterator.get_next())
+
         # Run training analytics every so many batches
         if i%25 == 0:
+            acc, los, lr_now = sess.run([accuracy, loss, lr], {X: batch_X, Y_: batch_Y, step: i})
             print("Training Analytics")
-            # print("LR: "+str(lr_now))
+            print("LR: " + str(lr_now))
+            print("Loss: " + str(los))
+            print("Accuracy: " + str(acc))
         # Run test analytics every so many batches
         if i%100 == 0:
+            TEST_DATA, TEST_LABELS = sess.run(test_iterator.get_next())
+            a, l = sess.run([accuracy, loss], {X: TEST_DATA, Y_: TEST_LABELS})
             print("Testing Analytics")
+            print("Loss: " + str(l))
+            print("Accuracy: " + str(a))
             # acc_t, loss_t, lr_t = sess.run([accuracy, loss, lr], feed_dict:{X: TEST_DATA, Y_: TEST_LABELS})
+        sess.run(optimizer, {X: batch_X, Y_:batch_Y, step: i})
     # After training loops are complete, execute a final validation step
     # All of the training we plan to do is now complete
     print("Final NN Test")
