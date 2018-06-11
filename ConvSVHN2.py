@@ -8,6 +8,7 @@ import numpy as np
 import collections
 
 from scipy.io import loadmat
+from datetime import datetime
 # from tensorflow.python.framework import dtypes
 # import tensorflow.examples.tutorials.mnist as mnist
 # from tensorflow.python.framework import random_seed
@@ -15,7 +16,7 @@ from scipy.io import loadmat
 ###############
 # Global Vars #
 ###############
-
+print("Tensorflow version " + tf.__version__)
 # Size of inputs
 
 DIM = 32
@@ -206,6 +207,7 @@ dense_activations = tf.reduce_max(Y4r, [0])
 lr = 0.0001 +  tf.train.exponential_decay(0.02, iter, 1600, 1/math.e)
 train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
 
+
 def main():
     test_inputs = norm_images(test_images)
     train_inputs = norm_images(train_images)
@@ -232,27 +234,60 @@ def main():
     sess = tf.Session()
     sess.run(init)
 
+    now = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    root_logdir = "tf_logs"
+    logdir = "{}/run-{}".format(root_logdir, ("Codelab" + now))
+
+    acc_summary_train = tf.summary.scalar('Accuracy_Training', accuracy)
+    acc_summary_test = tf.summary.scalar('Accuracy_Test', accuracy)
+    loss_summary_train = tf.summary.scalar('Loss_Training', cross_entropy)
+    loss_summary_test = tf.summary.scalar('Loss_Test', cross_entropy)
+    # weights_summary = tf.summary.histogram('Weights', allweights)
+    # biases_summary = tf.summary.histogram('Biases', allbiases)
+    # conv_act_summary = tf.summary.histogram('Convolutional Activations', conv_activations)
+    # dens_act_summary = tf.summary.histogram('Dense Activations', dense_activations)
+
+    file_writer = tf.summary.FileWriter(logdir, tf.get_default_graph())
+
     for i in range(num_of_batches):
         batch_X, batch_Y = sess.run(next_train)
 
         # Run training analytics every so many batches
         if i%25 == 0:
-            a, c, ca, da, l = sess.run([accuracy, cross_entropy, conv_activations, dense_activations, lr],
-                                           feed_dict={X: batch_X, Y_: batch_Y, iter: i, tst: False, pkeep: 1.0,
-                                                      pkeep_conv: 1.0})
+            a, c, l = sess.run([acc_summary_train,
+                                loss_summary_train,
+                                lr],
+                               feed_dict={X: batch_X,
+                                          Y_: batch_Y,
+                                          iter: i,
+                                          tst: False,
+                                          pkeep: 1.0,
+                                          pkeep_conv: 1.0})
+            file_writer.add_summary(c, i)
+            file_writer.add_summary(a, i)
+            # file_writer.add_summary(w_str, i)
+            # file_writer.add_summary(b_str, i)
+            # file_writer.add_summary(ca, i)
+            # file_writer.add_summary(da, i)
             print(str(i) + ": accuracy:" + str(a) + " loss: " + str(c) + " (lr:" + str(l) + ")")
         # Run test analytics every so many batches
         if i%100 == 0:
             TEST_DATA, TEST_LABELS = sess.run(next_test)
-            a, c = sess.run([accuracy, cross_entropy],
+            a, c = sess.run([acc_summary_test,
+                             loss_summary_test],
                             feed_dict={X: TEST_DATA,
                                        Y_: TEST_LABELS,
                                        tst: True,
                                        pkeep: 1.0,
                                        pkeep_conv: 1.0})
-            print(str(i) + ": ********* epoch " + str(i)
-                + " ********* test accuracy:" + str(a)
-                + " test loss: " + str(c))
+            file_writer.add_summary(c, i)
+            file_writer.add_summary(a, i)
+            print(str(i) + ": ********* epoch " +
+                  str(i) +
+                  " ********* test accuracy:" +
+                  str(a) +
+                  " test loss: " +
+                  str(c))
             # datavis.append_test_curves_data(i, a, c)
             # datavis.update_image2(im)
         sess.run(train_step, {X: batch_X, Y_: batch_Y, tst: False, iter: i, pkeep: 0.75, pkeep_conv: 1.0})

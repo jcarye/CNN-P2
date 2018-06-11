@@ -8,6 +8,7 @@ import numpy as np
 import collections
 
 from scipy.io import loadmat
+from datetime import datetime
 # from tensorflow.python.framework import dtypes
 # import tensorflow.examples.tutorials.mnist as mnist
 # from tensorflow.python.framework import random_seed
@@ -162,7 +163,7 @@ Y = tf.nn.softmax(Y_fa2_logits)
 
 # Learning Rate and Optimizer
 lr = final_lr + tf.train.exponential_decay(init_lr, step, lr_decay, 1/math.e)
-loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=Y_fa2_logits, labels=Y_))
+loss = tf.nn.softmax_cross_entropy_with_logits(logits=Y_fa2_logits, labels=Y_)
 optimizer = tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
 
 # Checking accuracy
@@ -193,12 +194,29 @@ def main():
     sess = tf.InteractiveSession()
     sess.run(tf.global_variables_initializer())
 
+    now = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    root_logdir = "tf_logs"
+    logdir = "{}/run-{}".format(root_logdir, ("Codelab" + now))
+
+    acc_summary_train = tf.summary.scalar('Accuracy_Training', accuracy)
+    acc_summary_test = tf.summary.scalar('Accuracy_Test', accuracy)
+    loss_summary_train = tf.summary.scalar('Loss_Training', loss)
+    loss_summary_test = tf.summary.scalar('Loss_Test', loss)
+    # weights_summary = tf.summary.histogram('Weights', allweights)
+    # biases_summary = tf.summary.histogram('Biases', allbiases)
+    # conv_act_summary = tf.summary.histogram('Convolutional Activations', conv_activations)
+    # dens_act_summary = tf.summary.histogram('Dense Activations', dense_activations)
+
+    file_writer = tf.summary.FileWriter(logdir, tf.get_default_graph())
+
     for i in range(num_of_batches):
         batch_X, batch_Y = sess.run(next_train)
 
         # Run training analytics every so many batches
         if i%25 == 0:
-            acc, los, lr_now = sess.run([accuracy, loss, lr], {X: batch_X, Y_: batch_Y, step: i})
+            acc, los, lr_now = sess.run([acc_summary_train, loss_summary_train, lr], {X: batch_X, Y_: batch_Y, step: i})
+            file_writer.add_summary(los, i)
+            file_writer.add_summary(acc, i)
             print("Training Analytics")
             print("LR: " + str(lr_now))
             print("Loss: " + str(los))
@@ -206,7 +224,9 @@ def main():
         # Run test analytics every so many batches
         if i%100 == 0:
             TEST_DATA, TEST_LABELS = sess.run(next_test)
-            a, l = sess.run([accuracy, loss], {X: TEST_DATA, Y_: TEST_LABELS})
+            a, l = sess.run([acc_summary_test, loss_summary_test], {X: TEST_DATA, Y_: TEST_LABELS})
+            file_writer.add_summary(l, i)
+            file_writer.add_summary(a, i)
             print("Testing Analytics")
             print("Loss: " + str(l))
             print("Accuracy: " + str(a))
